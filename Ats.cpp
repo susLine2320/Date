@@ -111,10 +111,10 @@ ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int
 	panel[220] = g_date.date_disp;
 	panel[221] = g_date.yobi_disp;
 
-	// 外気温 (222: 10の位, 223: 1の位, 224: 0.1の位)
-	panel[222] = (outerInt / 100) % 10;
-	panel[223] = (outerInt / 10) % 10;
-	panel[224] = outerInt % 10;
+	// 外気温 (228: 10の位, 229: 1の位, 230: 0.1の位)
+	panel[228] = (outerInt / 100) % 10;
+	panel[229] = (outerInt / 10) % 10;
+	panel[230] = outerInt % 10;
 
 	// 内気温 (225: 10の位, 226: 1の位, 227: 0.1の位)
 	panel[225] = (roomInt / 100) % 10;
@@ -122,8 +122,8 @@ ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int
 	panel[227] = roomInt % 10;
 
 	//スイッチ類
-	panel[228] = g_air.acSwitch; //エアコンCgS
-	panel[229] = g_air.GetACMode(); //動作モード
+	panel[222] = g_air.acSwitch; //エアコンCgS
+	panel[223] = g_air.GetACMode(); //動作モード
 
 	// サウンド出力
 	sound[226] = g_air.GetACMode() == 0 || g_air.GetACMode() == 3 ? ATS_SOUND_STOP : ATS_SOUND_PLAYLOOPING;
