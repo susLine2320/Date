@@ -6,6 +6,9 @@
 // ロで定義されたシンボルをエクスポートされたものとして参照します。
 //#pragma data_seg(".shared")
 //#pragma data_seg()
+#pragma once
+#include <cstdlib>
+#include <cmath>   // sinf 用にこれも必要かもしれません
 
 #define BEACON_DATE 607 // 日時設定
 
@@ -61,12 +64,6 @@ public:
 		year_disp = status->tm_year + 1900;
 		yobi_disp = status->tm_wday + 1;
 
-		// 冷房の制御
-		if (Cooler == 0)
-		{
-			//Cooler = (m_month >= 6 && m_month <= 9);
-		}
-
 		// 日時補正を行う
 		if (yobi_set > 0) {
 			setdate(yobi_set);
@@ -79,6 +76,12 @@ public:
 			yobi_disp = m_yobi;
 		}
 		*/
+
+		// 冷房の制御
+		if (Cooler == 0)
+		{
+			//Cooler = (m_month >= 6 && m_month <= 9);
+		}
 	}
 
 
@@ -86,6 +89,13 @@ public:
 	void SetYobi(int yobi)
 	{
 		yobi_set = yobi;//10以上が設定年号、1の位が設定曜日（1～7）
+	}
+
+	// 現在時刻（h）を返す
+	float GetCurrentTimeInHours()
+	{
+		int second = g_time / 1000;
+		return second / 3600;
 	}
 
 private:
@@ -128,7 +138,7 @@ private:
 		yobi_disp = t.tm_wday + 1; // 表示だけ 1-7 に戻す
 	}
 
-	//曜日取得関数
+	//　曜日取得関数
 	int GetDayOfWeek(int y, int m, int d)
 	{
 		// 1月と2月は前年の13月、14月として計算する（ツェラーの性質）
@@ -140,4 +150,154 @@ private:
 		return(y + y / 4 - y / 100 + y / 400 + (13 * m + 8) / 5 + d + 700) % 7;
 	}
 
+	/*
+	// 外気温を決定
+	float CalculateCurrentTemp() {
+		// 1. 月ごとのベース気温（近年の東京などの都市部をイメージ）
+		float monthlyBase[] = { 0, 6, 7, 12, 18, 23, 26, 30, 31, 27, 20, 14, 8 };
+		float base = monthlyBase[month_disp] + day_offset; // day_offsetは初期化時に決定
+
+		// 2. 時刻補正（14時をピークとしたサインカーブ）
+		// GetCurrentTimeInHours() は「14.5（14時30分）」のような小数値を返す想定
+		float hour = GetCurrentTimeInHours();
+		float timeVariation = 5.0f * sinf((hour - 8.0f) * 3.14159f / 12.0f);
+
+		// 3. 走行中の「ゆらぎ」 (極端な変化を避けるため、微小なランダム値を蓄積)
+		// 毎フレームではなく、一定時間ごとに小さな値を加減算する
+		static float wobble = 0.0f;
+		wobble += ((rand() % 100 - 50) / 1000.0f); // -0.05 ~ +0.05の極小変化
+		if (wobble > 1.0f)  wobble = 1.0f;  // 最大1度の振れ幅に制限
+		if (wobble < -1.0f) wobble = -1.0f;
+
+		return base + timeVariation + wobble;
+	}*/
+
+
+
 };	// CDate
+
+CDate g_date; // 日付
+
+class CAir
+{
+public:
+	void initialize(int atsTime)
+	{
+		// 1. まず「その日の運勢」を決める（これがないと気温計算がズレる）
+		day_offset = (float)(rand() % 61 - 30) / 10.0f;
+		wobble = 0.0f;
+		last_time = atsTime;
+
+		// 2. 運勢が決まった後に、初期の外気温を算出する
+		float initialOuterTemp = CalculateNextOuterTemp();
+		this->outer_temp = initialOuterTemp; // 初期値を保持
+
+		// 3. 室内温度の初期設定
+		// 「運用中」か「出庫直後」かをランダムで決めるロジックを入れるとリアルです
+		if (rand() % 100 < 50) {
+			// すでに空調が効いている状態
+			if (initialOuterTemp > 25.0f) room_temp = 24.5f;
+			else if (initialOuterTemp < 10.0f) room_temp = 19.0f;
+			else room_temp = initialOuterTemp;
+		}
+		else {
+			// 外気と同じ（放置されていた車両）
+			room_temp = initialOuterTemp;
+		}
+
+		current_mode = 0; // 最初は「切」からスタート
+	}
+
+	// --- 外部から毎フレーム呼ぶためのメイン関数 ---
+	void Update(int atsTime, int acSwitch) {
+		// 1. 経過時間(dt)の計算
+		if (last_time == 0) { last_time = atsTime; return; }
+		float dt = (atsTime - last_time) / 1000.0f;
+		if (dt <= 0) return;
+		last_time = atsTime;
+
+		// 2. 外気温の更新 (引数で今の値を与えて、次の値を戻り値で受け取る)
+		this->outer_temp = CalculateNextOuterTemp();
+
+		// 3. 車内温度の更新
+		this->room_temp = CalculateNextRoomTemp(this->room_temp, this->outer_temp, this->current_mode, dt);
+
+		// 4. 空調モードの判定 (ヒステリシス実装)
+		this->current_mode = DetermineNextMode(acSwitch);
+	}
+
+	// --- 外部（Ats.cpp）で音やパネルを制御するための Getter ---
+	int GetACMode() const { return current_mode; }
+	float GetRoomTemp() const { return room_temp; }
+	float GetOuterTemp() const { return outer_temp; }
+
+private:
+	float outer_temp;
+	float room_temp;
+	int current_mode;
+	float wobble; // 揺らぎだけは内部で蓄積保持が必要
+	float day_offset;  // その日の運勢
+	int   last_time;   // 前回の実行時刻
+
+	// 外気温の更新：前の値を引数で受け取る
+	float CalculateNextOuterTemp() {
+
+		// 1. 月ごとのベース気温（近年の東京などの都市部をイメージ）
+		float monthlyBase[] = { 0, 6, 7, 12, 18, 23, 26, 30, 31, 27, 20, 14, 8 };
+		float base = monthlyBase[g_date.month_disp] + day_offset; // day_offsetは初期化時に決定
+
+		// 2. 時刻補正（14時をピークとしたサインカーブ）
+		// GetCurrentTimeInHours() は「14.5（14時30分）」のような小数値を返す想定
+		float hour = g_date.GetCurrentTimeInHours();
+		float timeVariation = 5.0f * sinf((hour - 8.0f) * 3.14159f / 12.0f);
+
+		// 揺らぎ（wobble）の更新
+		this->wobble += ((rand() % 101 - 50) / 10000.0f);
+		if (this->wobble > 1.0f)  this->wobble = 1.0f;
+		if (this->wobble < -1.0f) this->wobble = -1.0f;
+
+		// 前の値に依存させる場合（例：急変防止のフィルタリング）はここで currentOuter を使う
+		// 今回は「ベース + 揺らぎ」が絶対値として出るので、そのまま返してもOK
+		return base + timeVariation + this->wobble;
+	}
+
+	// 車内温度の更新：前の値を受け取り、計算結果を返す
+	float CalculateNextRoomTemp(float currentRoom, float outer, int mode, float dt) {
+		float nextTemp = currentRoom;
+
+		// 1. 自然熱交換（外気に近づく）
+		nextTemp += (outer - currentRoom) * 0.01f * dt;
+
+		// 2. 乗客・機器の発熱
+		nextTemp += 0.005f * dt;
+
+		// 3. 空調の効果
+		if (mode == 2)      nextTemp -= 0.06f * dt; // 冷房
+		else if (mode == 3) nextTemp += 0.04f * dt; // 暖房
+
+		return nextTemp; // 新しい温度を返す
+	}
+
+	// --- 空調モード判定ロジック ---
+	int DetermineNextMode(int acSwitch) {
+		if (acSwitch == 0) return 0; // 【切】
+		if (acSwitch == 1) {        // 【入】
+			return (outer_temp > 22.0f) ? 2 : 1; // 暑ければ冷房、そうでなければ送風
+		}
+
+		// 【自動】(acSwitch == 2) のヒステリシス判定
+		int next = current_mode;
+		// 冷房の起動・停止
+		if (room_temp > 26.5f) next = 2;
+		else if (room_temp < 25.0f && current_mode == 2) next = 1;
+
+		// 暖房の起動・停止 (音なし)
+		if (room_temp < 17.0f) next = 3;
+		else if (room_temp > 19.0f && current_mode == 3) next = 0;
+
+		// 送風判定
+		if (room_temp > 22.0f && next == 0) next = 1;
+
+		return next;
+	}
+};

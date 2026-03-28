@@ -7,6 +7,7 @@
 #include "Ats.h"
 
 CDate g_date; // “ú•t
+CAir g_air; //‹ó’²
 
 BOOL APIENTRY DllMain( HANDLE hModule, 
                        DWORD  ul_reason_for_call, 
