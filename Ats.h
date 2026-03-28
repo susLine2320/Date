@@ -176,7 +176,7 @@ private:
 
 };	// CDate
 
-CDate g_date; // 日付
+extern CDate g_date; // 日付
 
 class CAir
 {
@@ -191,6 +191,7 @@ public:
 		// 2. 運勢が決まった後に、初期の外気温を算出する
 		float initialOuterTemp = CalculateNextOuterTemp();
 		this->outer_temp = initialOuterTemp; // 初期値を保持
+		targetOuterTemp = outer_temp;
 
 		// 3. 室内温度の初期設定
 		// 「運用中」か「出庫直後」かをランダムで決めるロジックを入れるとリアルです
@@ -210,14 +211,37 @@ public:
 
 	// --- 外部から毎フレーム呼ぶためのメイン関数 ---
 	void Update(int atsTime, int acSwitch) {
+
 		// 1. 経過時間(dt)の計算
 		if (last_time == 0) { last_time = atsTime; return; }
 		float dt = (atsTime - last_time) / 1000.0f;
 		if (dt <= 0) return;
 		last_time = atsTime;
 
-		// 2. 外気温の更新 (引数で今の値を与えて、次の値を戻り値で受け取る)
-		this->outer_temp = CalculateNextOuterTemp();
+		// --- 外気温の計算 ---
+
+	// A. まず「時刻と季節」からベースとなる外気温を算出
+		float baseOuter = CalculateNextOuterTemp();
+
+		// B. 地上子から指定された「理想の気温(target)」と「ベース(base)」の差を計算
+		// 例：ベースが15度で、地上子が8度を指定したら、目指すべきオフセットは -7度
+		float targetOffset = targetOuterTemp - baseOuter;
+
+		// C. 現在のオフセットを目標オフセットにじわじわ近づける
+		float step = 0.1f * dt; // 1秒間に0.1度変化
+		if (offsetOuterTemp < targetOffset) {
+			offsetOuterTemp = min(offsetOuterTemp + step, targetOffset);
+		}
+		else if (offsetOuterTemp > targetOffset) {
+			offsetOuterTemp = max(offsetOuterTemp - step, targetOffset);
+		}
+
+		// 3. 基本の外気温 = ベース + 補正
+		float nominalOuter = baseOuter + offsetOuterTemp;
+
+		// 4. ★ 最後に「ゆらぎ」だけを別途加算する
+		// (rand()等を使った計算をここで行う。nominalOuterをベースにする)
+		this->outer_temp = ApplyWobble(nominalOuter);
 
 		// 3. 車内温度の更新
 		this->room_temp = CalculateNextRoomTemp(this->room_temp, this->outer_temp, this->current_mode, dt);
@@ -225,6 +249,8 @@ public:
 		// 4. 空調モードの判定 (ヒステリシス実装)
 		this->current_mode = DetermineNextMode(acSwitch);
 	}
+
+	void SetTargetOuterTemp(float temp) { targetOuterTemp = temp; }
 
 	// --- 外部（Ats.cpp）で音やパネルを制御するための Getter ---
 	int GetACMode() const { return current_mode; }
@@ -234,6 +260,8 @@ public:
 private:
 	float outer_temp;
 	float room_temp;
+	float targetOuterTemp;  // 地上子から指定された目標の外気温
+	float offsetOuterTemp = 0.0f;
 	int current_mode;
 	float wobble; // 揺らぎだけは内部で蓄積保持が必要
 	float day_offset;  // その日の運勢
@@ -243,7 +271,7 @@ private:
 	float CalculateNextOuterTemp() {
 
 		// 1. 月ごとのベース気温（近年の東京などの都市部をイメージ）
-		float monthlyBase[] = { 0, 6, 7, 12, 18, 23, 26, 30, 31, 27, 20, 14, 8 };
+		float monthlyBase[] = { 0, 6, 12, 18, 20, 23, 26, 30, 31, 27, 20, 13, 7 };
 		float base = monthlyBase[g_date.month_disp] + day_offset; // day_offsetは初期化時に決定
 
 		// 2. 時刻補正（14時をピークとしたサインカーブ）
@@ -251,6 +279,12 @@ private:
 		float hour = g_date.GetCurrentTimeInHours();
 		float timeVariation = 5.0f * sinf((hour - 8.0f) * 3.14159f / 12.0f);
 
+		return base + timeVariation;
+	}
+
+	// 揺らぎの加算
+	float ApplyWobble(float temp)
+	{
 		// 揺らぎ（wobble）の更新
 		this->wobble += ((rand() % 101 - 50) / 10000.0f);
 		if (this->wobble > 1.0f)  this->wobble = 1.0f;
@@ -258,7 +292,7 @@ private:
 
 		// 前の値に依存させる場合（例：急変防止のフィルタリング）はここで currentOuter を使う
 		// 今回は「ベース + 揺らぎ」が絶対値として出るので、そのまま返してもOK
-		return base + timeVariation + this->wobble;
+		return temp + this->wobble;
 	}
 
 	// 車内温度の更新：前の値を受け取り、計算結果を返す
@@ -273,7 +307,7 @@ private:
 
 		// 3. 空調の効果
 		if (mode == 2)      nextTemp -= 0.06f * dt; // 冷房
-		else if (mode == 3) nextTemp += 0.04f * dt; // 暖房
+		else if (mode == 3) nextTemp += 0.06f * dt; // 暖房
 
 		return nextTemp; // 新しい温度を返す
 	}
