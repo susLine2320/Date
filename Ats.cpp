@@ -109,7 +109,7 @@ ATS_API void WINAPI SetBeaconData(ATS_BEACONDATA beaconData)
 {
 	switch (beaconData.Type)
 	{
-		case 607: //—j“úİ’è
+		case BEACON_DATE: //—j“úİ’è
 			g_date.SetYobi(beaconData.Optional);
 			break;
 	}

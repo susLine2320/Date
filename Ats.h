@@ -7,15 +7,7 @@
 //#pragma data_seg(".shared")
 //#pragma data_seg()
 
-#define ATS_BEACON_S 0 // Sƒƒ“ƒO
-#define ATS_BEACON_SN 1 // SN’¼‰º
-#define ATS_BEACON_SNRED 2 // SNŒëo”­–h~
-#define ATS_BEACON_P 3 // P’â~M†
-#define ATS_BEACON_EMG 4 // P‘¦’â(”ñí)
-#define ATS_BEACON_SVC 5 // P‘¦’â(í—p)
-#define ATS_BEACON_SPDLIM 6 // P•ªŠòŠí‘¬“x§ŒÀ
-#define ATS_BEACON_SPDMAX 7 // PÅ‚‘¬“x
-#define ATS_BEACON_SPP 8 // ’âÔ‰w’Ê‰ß–h~‘•’u
+#define BEACON_DATE 607 // “úİ’è
 
 int g_emgBrake; // ”ñíƒmƒbƒ`
 int g_svcBrake; // í—pÅ‘åƒmƒbƒ`
@@ -39,20 +31,14 @@ public:
 	// o—Í
 	int Cooler; // —â–[
 	int CoolerSound; // —â–[‰¹
-	int year_disp;
-	int month_disp;
-	int date_disp;
-	int yobi_disp;
-	int yobi_set; //—j“úİ’è
-	int pastyobi;
+	int year_disp;// ”Ni1`12j
+	int month_disp;// Œ(1`12)
+	int date_disp;// “úi1`31j
+	int yobi_disp;//—j“úi“ú`“yj
 
 	// ‰Šú‰»‚·‚é
 	void initialize(void)
 	{
-		m_month = 0; // Œ
-		m_date = 0;
-		m_year = 0;
-		m_yobi = 0;
 		yobi_set = 0; //’nãq—j“úİ’è
 		year_disp = 0;
 		month_disp = 0;
@@ -70,33 +56,40 @@ public:
 	{
 		time(&t);
 		status = localtime(&t);
-		m_month = status->tm_mon + 1;
-		m_date = status->tm_mday;
-		m_year = status->tm_year + 1900;
-		m_yobi = status->tm_wday + 1;
+		month_disp = status->tm_mon + 1;
+		date_disp = status->tm_mday;
+		year_disp = status->tm_year + 1900;
+		yobi_disp = status->tm_wday + 1;
 
 		// —â–[‚Ì§Œä
 		if (Cooler == 0)
 		{
-			Cooler = (m_month >= 6 && m_month <= 9);
+			//Cooler = (m_month >= 6 && m_month <= 9);
 		}
 
 		// “ú•â³‚ğs‚¤
 		if (yobi_set > 0) {
 			setdate(yobi_set);
 		}
+		/* MŒn”p~‚É”º‚¢ƒRƒƒ“ƒgƒAƒEƒg
 		else {
 			year_disp = m_year;
 			month_disp = m_month;
 			date_disp = m_date;
 			yobi_disp = m_yobi;
 		}
+		*/
 	}
 
-	void SetYobi(int yobi)//—j“úİ’è’nãq‚Åİ’è
+
+	// —j“úİ’è’nãq‚Åİ’è
+	void SetYobi(int yobi)
 	{
 		yobi_set = yobi;//10ˆÈã‚ªİ’è”N†A1‚ÌˆÊ‚ªİ’è—j“úi1`7j
 	}
+
+private:
+	int yobi_set; //—j“úİ’è
 
 	// “ú•â³
 	void setdate(int yobi) {
@@ -107,13 +100,16 @@ public:
 		if (yobi >= 10) {//—j“ú‚ª10ˆÈã¨”Nw’è
 			year_disp = yobi / 10; //”N‚Íİ’è‚µ‚½”N”
 		}
+
+		/* MŒn”p~‚É”º‚¢ƒRƒƒ“ƒgƒAƒEƒg
 		else {//—j“ú‚ª9ˆÈ‰º¨”N‚Í¡‚Ì”N
 			year_disp = m_year;
 		}
 		month_disp = m_month; //Œ‚ÍˆêØ•Ï“®‚µ‚È‚¢
+		*/
 
 		//	Œ»ó‚Ì—j“ú
-		int currentWday = GetDayOfWeek(year_disp, month_disp, m_date);
+		int currentWday = GetDayOfWeek(year_disp, month_disp, date_disp);
 
 		//	ƒ^[ƒQƒbƒg‚Æ‚Ì‚¸‚ê
 		int diff = targetWday - currentWday;
@@ -121,59 +117,16 @@ public:
 		struct tm t = { 0 };
 		t.tm_year = year_disp - 1900;
 		t.tm_mon = month_disp - 1;
-		t.tm_mday = m_date + diff;
+		t.tm_mday = date_disp + diff;
 
 		mktime(&t);
-		/*
-		if (pastyobi != yobi % 10)//İ’è‚·‚é—j“ú‚Æˆá‚Á‚Ä‚¢‚é‚È‚ç
-		{
-			date_disp = m_date + (yobi % 10 - pastyobi - 7);//‰ß‹‚Ì—j“ú=2/İ’è—j“ú=3‚È‚ç1“úi‚ß‚é
-			if (date_disp < 1)//1Ø‚Á‚½‚ç7“úŒJ‚èã‚°
-			{
-				date_disp = date_disp + 7;
-				if (date_disp < 1)//1Ø‚Á‚½‚ç7“úŒJ‚èã‚°
-				{
-					date_disp = date_disp + 7;
-				}
-			}
-		}
-		else {
-			date_disp = m_date;
-		}
-		*/
 		
+		// ÅI“I‚È’l‚ğ disp Œn‚É‘‚«–ß‚·
 		year_disp = t.tm_year + 1900;
 		month_disp = t.tm_mon + 1;
 		date_disp = t.tm_mday;
 		yobi_disp = t.tm_wday + 1; // •\¦‚¾‚¯ 1-7 ‚É–ß‚·
 	}
-	/*
-		void set(void) {
-			//year_disp = m_year % 100;
-
-		}
-
-		//‰ß‹‚Ì¡“ú‚Ì—j“ú‚ğæ“¾
-	int zeller(int year, int month, int day)
-		{
-			// month ‚ª 1 ‚Ü‚½‚Í 2 ‚Å‚ ‚éê‡‚Í”÷’²®‚ğ‚µ‚Ü‚·B
-			if (month == 1 || month == 2)
-			{
-				// ‚PŒ‚Í‘O”N‚Ì‚P‚RŒA‚QŒ‚Í‘O”N‚Ì‚P‚SŒ‚Æ‚µ‚Ü‚·B
-				year--;
-				month += 12;
-			}
-			// ’n‹…‚ÌŒö“]üŠú‚Ì—L—”‹ß— 365 + 1/4 - 1/100 + 1/400 ‚Æ‚ ‚í‚¹‚ÄA‚Ü‚½A¬”“_‰‰Z‚ğ®”‚©‚·‚é‚±‚Æ‚Å 30 “ú‚Æ 31 “ú‚ÌŒë·‚ğ‹zû‚·‚é‚ç‚µ‚¢‚Å‚·B
-			// ”N‚ğãˆÊ (yH) ‚Æ‰ºˆÊ (yL) ‚Æ‚É•ª—£‚µ‚Ü‚·B
-
-			int yH = int(year / 100);
-			int yL = year - (yH * 100);
-
-			// Zeller ‚ÌŒö®‚ğ—p‚¢‚Ä week ‚ğŒvZ‚µ‚Ü‚·B
-			int week = (yH >> 2) - 2 * yH + (yL >> 2) + yL + int((month + 1) * 2.6) + day;
-			pastyobi =  (week % 7) + 1; //‰ß‹‚Ì¡“ú‚Ì—j“ú
-		}
-	*/
 
 	//—j“úæ“¾ŠÖ”
 	int GetDayOfWeek(int y, int m, int d)
@@ -187,9 +140,4 @@ public:
 		return(y + y / 4 - y / 100 + y / 400 + (13 * m + 8) / 5 + d + 700) % 7;
 	}
 
-private:
-	int m_month; // Œ(1`12)
-	int m_date; // “úi1`31j
-	int m_year; // ”Ni1`12j
-	int m_yobi; //—j“úi“ú`“yj
 };	// CDate
