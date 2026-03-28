@@ -11,6 +11,7 @@
 #include <cmath>   // sinf 用にこれも必要かもしれません
 
 #define BEACON_DATE 607 // 日時設定
+#define BEACON_AIR 608 // 空調設定
 
 int g_emgBrake; // 非常ノッチ
 int g_svcBrake; // 常用最大ノッチ
@@ -85,7 +86,7 @@ public:
 	}
 
 
-	// 曜日設定地上子で設定
+	// 曜日設定地上子で設定（#607）
 	void SetYobi(int yobi)
 	{
 		yobi_set = yobi;//10以上が設定年号、1の位が設定曜日（1～7）
@@ -95,7 +96,7 @@ public:
 	float GetCurrentTimeInHours()
 	{
 		int second = g_time / 1000;
-		return second / 3600;
+		return (float)second / 3600;
 	}
 
 private:
@@ -107,8 +108,13 @@ private:
 		// これを「targetWday（目標の曜日）」として定義します
 		int targetWday = (yobi % 10) - 1;
 
-		if (yobi >= 10) {//曜日が10以上→年指定
-			year_disp = yobi / 10; //年は設定した年数
+		if (yobi % 100000 >= 10) {//曜日が10以上→年指定
+			year_disp = yobi % 100000 / 10; //年は設定した年数
+		}
+
+		if (yobi >= 100000)
+		{
+			month_disp = yobi / 100000; //月は設定した月
 		}
 
 		/* M系廃止に伴いコメントアウト
@@ -150,30 +156,6 @@ private:
 		return(y + y / 4 - y / 100 + y / 400 + (13 * m + 8) / 5 + d + 700) % 7;
 	}
 
-	/*
-	// 外気温を決定
-	float CalculateCurrentTemp() {
-		// 1. 月ごとのベース気温（近年の東京などの都市部をイメージ）
-		float monthlyBase[] = { 0, 6, 7, 12, 18, 23, 26, 30, 31, 27, 20, 14, 8 };
-		float base = monthlyBase[month_disp] + day_offset; // day_offsetは初期化時に決定
-
-		// 2. 時刻補正（14時をピークとしたサインカーブ）
-		// GetCurrentTimeInHours() は「14.5（14時30分）」のような小数値を返す想定
-		float hour = GetCurrentTimeInHours();
-		float timeVariation = 5.0f * sinf((hour - 8.0f) * 3.14159f / 12.0f);
-
-		// 3. 走行中の「ゆらぎ」 (極端な変化を避けるため、微小なランダム値を蓄積)
-		// 毎フレームではなく、一定時間ごとに小さな値を加減算する
-		static float wobble = 0.0f;
-		wobble += ((rand() % 100 - 50) / 1000.0f); // -0.05 ~ +0.05の極小変化
-		if (wobble > 1.0f)  wobble = 1.0f;  // 最大1度の振れ幅に制限
-		if (wobble < -1.0f) wobble = -1.0f;
-
-		return base + timeVariation + wobble;
-	}*/
-
-
-
 };	// CDate
 
 extern CDate g_date; // 日付
@@ -181,6 +163,10 @@ extern CDate g_date; // 日付
 class CAir
 {
 public:
+	bool isInitialized = false;
+	int acSwitch = 2; // 0:OFF, 1:ON, 2:AUTO (初期値)
+	bool keyWasPressed = false;
+
 	void initialize(int atsTime)
 	{
 		// 1. まず「その日の運勢」を決める（これがないと気温計算がズレる）
@@ -250,7 +236,14 @@ public:
 		this->current_mode = DetermineNextMode(acSwitch);
 	}
 
-	void SetTargetOuterTemp(float temp) { targetOuterTemp = temp; }
+	// 目標温度を設定（#608）
+	void SetTargetOuterTemp(float temp) 
+	{
+		if (temp == 0)
+			targetOuterTemp = CalculateNextOuterTemp();
+		else
+			targetOuterTemp = temp;
+	}
 
 	// --- 外部（Ats.cpp）で音やパネルを制御するための Getter ---
 	int GetACMode() const { return current_mode; }
@@ -262,7 +255,7 @@ private:
 	float room_temp;
 	float targetOuterTemp;  // 地上子から指定された目標の外気温
 	float offsetOuterTemp = 0.0f;
-	int current_mode;
+	int current_mode; //切:0,送風:1,冷房:2,暖房:3
 	float wobble; // 揺らぎだけは内部で蓄積保持が必要
 	float day_offset;  // その日の運勢
 	int   last_time;   // 前回の実行時刻
