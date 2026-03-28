@@ -81,6 +81,7 @@ public:
 			Cooler = (m_month >= 6 && m_month <= 9);
 		}
 
+		// 日時補正を行う
 		if (yobi_set > 0) {
 			setdate(yobi_set);
 		}
@@ -97,7 +98,12 @@ public:
 		yobi_set = yobi;//10以上が設定年号、1の位が設定曜日（1～7）
 	}
 
+	// 日時補正
 	void setdate(int yobi) {
+		// Readmeでは 日=1～土=7 なので、1を引いて 0(日)～6(土) に変換
+		// これを「targetWday（目標の曜日）」として定義します
+		int targetWday = (yobi % 10) - 1;
+
 		if (yobi >= 10) {//曜日が10以上→年指定
 			year_disp = yobi / 10; //年は設定した年数
 		}
@@ -105,31 +111,20 @@ public:
 			year_disp = m_year;
 		}
 		month_disp = m_month; //月は一切変動しない
-		yobi_disp = yobi % 10;
-		if (year_disp % 4 != 0 && m_month == 2 && m_date == 29)//うるう年でない29日は28日扱い
-		{
-			m_date = 28;
-		}
 
-		// month が 1 または 2 である場合は微調整をします。
-		if (m_month == 1 || m_month == 2)
-		{
-			// １月は前年の１３月、２月は前年の１４月とします。
-			year_disp--;
-			m_month += 12;
-		}
-		// 地球の公転周期の有理数近似 365 + 1/4 - 1/100 + 1/400 とあわせて、また、小数点演算を整数かすることで 30 日と 31 日の誤差を吸収するらしいです。
-		// 年を上位 (yH) と下位 (yL) とに分離します。
+		//	現状の曜日
+		int currentWday = GetDayOfWeek(year_disp, month_disp, m_date);
 
-		int yH = int(year_disp / 100);
-		int yL = year_disp - (yH * 100);
+		//	ターゲットとのずれ
+		int diff = targetWday - currentWday;
 
-		// Zeller の公式を用いて week を計算します。
-		int week = (yH >> 2) - 2 * yH + (yL >> 2) + yL + int((m_month + 1) * 2.6) + m_date;
-		pastyobi = (week % 7); //過去の今日の曜日（1～7）
+		struct tm t = { 0 };
+		t.tm_year = year_disp - 1900;
+		t.tm_mon = month_disp - 1;
+		t.tm_mday = m_date + diff;
 
-		year_disp++;
-
+		mktime(&t);
+		/*
 		if (pastyobi != yobi % 10)//設定する曜日と違っているなら
 		{
 			date_disp = m_date + (yobi % 10 - pastyobi - 7);//過去の曜日=2/設定曜日=3なら1日進める
@@ -145,6 +140,12 @@ public:
 		else {
 			date_disp = m_date;
 		}
+		*/
+		
+		year_disp = t.tm_year + 1900;
+		month_disp = t.tm_mon + 1;
+		date_disp = t.tm_mday;
+		yobi_disp = t.tm_wday + 1; // 表示だけ 1-7 に戻す
 	}
 	/*
 		void set(void) {
@@ -173,6 +174,19 @@ public:
 			pastyobi =  (week % 7) + 1; //過去の今日の曜日
 		}
 	*/
+
+	//曜日取得関数
+	int GetDayOfWeek(int y, int m, int d)
+	{
+		// 1月と2月は前年の13月、14月として計算する（ツェラーの性質）
+		if (m < 3) {
+			y--;
+			m += 12;
+		}
+
+		return(y + y / 4 - y / 100 + y / 400 + (13 * m + 8) / 5 + d + 700) % 7;
+	}
+
 private:
 	int m_month; // 月(1～12)
 	int m_date; // 日（1～31）
